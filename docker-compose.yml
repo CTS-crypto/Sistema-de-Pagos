@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: sistema_pagos_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: sistema_pagos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sistema_pagos_net
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: sistema_pagos_payment
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8000:8000"
+    networks:
+      - sistema_pagos_net
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: sistema_pagos_api
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: sistema_pagos
+      JWT_SECRET: ${JWT_SECRET:-secret}
+      PAYMENT_SERVICE_URL: http://payment-service:8000
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+       - postgres
+    networks:
+      - sistema_pagos_net
+    command: pnpm run dev
+
+volumes:
+  postgres_data:
+
+networks:
+  sistema_pagos_net:
+    driver: bridge
